@@ -1,0 +1,29 @@
+{% extends "core/base.html" %}
+
+{% block title %}Match #{{ match.id }} - IndiBet{% endblock %}
+
+{% block extra_css %}
+.board-page { padding: 60px 0; text-align: center; }
+.board-page h1 { font-size: 2.2rem; margin-bottom: 8px; }
+.versus { font-size: 1.4rem; color: #94a3b8; margin-bottom: 24px; }
+.versus strong { color: #e2e8f0; }
+.facts { display: inline-flex; gap: 24px; background: #111c33; border: 1px solid #1e293b; border-radius: 12px; padding: 20px 32px; margin-bottom: 24px; flex-wrap: wrap; justify-content: center; }
+.facts div span { display: block; color: #94a3b8; font-size: 0.85rem; }
+.facts div strong { color: #22c55e; font-size: 1.4rem; }
+.note { color: #94a3b8; margin-bottom: 24px; }
+{% endblock %}
+
+{% block content %}
+<div class="container board-page">
+    <h1>{{ match.get_game_display }} - Match #{{ match.id }}</h1>
+    <p class="versus"><strong>{{ match.creator.username }}</strong> vs <strong>{{ match.opponent.username }}</strong></p>
+
+    <div class="facts">
+        <div><span>Stake each</span><strong>K {{ match.stake|floatformat:2 }}</strong></div>
+        <div><span>Winner takes</span><strong>K {{ pot|floatformat:2 }}</strong></div>
+    </div>
+
+    <p class="note">The checkers board is built in the next step.</p>
+    <a href="{% url 'matches:lobby' %}" class="btn btn-outline">Back to lobby</a>
+</div>
+{% endblock %}

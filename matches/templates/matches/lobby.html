@@ -1,0 +1,297 @@
+{% extends "core/base.html" %}
+
+{% block title %}Lobby - IndiBet{% endblock %}
+
+{% block extra_css %}
+.lobby { padding: 40px 0 60px; }
+.lobby-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+.lobby-head h1 { font-size: 2rem; display: flex; align-items: center; gap: 14px; }
+.your-balance { color: #94a3b8; }
+.your-balance strong { color: #22c55e; }
+
+.live { font-size: 0.8rem; font-weight: 600; padding: 4px 12px; border-radius: 999px; background: #3f1d1d; color: #f87171; }
+.live.on { background: #123524; color: #22c55e; }
+
+.panel { background: #111c33; border: 1px solid #1e293b; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+.panel h2 { margin-bottom: 16px; font-size: 1.2rem; }
+
+.create-form { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.create-form .field { display: flex; flex-direction: column; gap: 6px; }
+.create-form label { font-weight: 600; font-size: 0.9rem; }
+.create-form select, .create-form input {
+    padding: 10px; border-radius: 8px; border: 1px solid #334155;
+    background: #0f172a; color: #e2e8f0; font-size: 1rem; min-width: 160px;
+}
+.create-form button { font-size: 1rem; }
+.hint { color: #94a3b8; font-size: 0.85rem; margin-top: 12px; }
+.error-box { display: none; background: #3f1d1d; border: 1px solid #f87171; color: #fecaca; padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; }
+
+.match-list { display: flex; flex-direction: column; gap: 10px; }
+.match-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: #0f172a; border: 1px solid #1e293b; border-radius: 10px; padding: 14px 18px;
+}
+.match-info { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.match-game { font-weight: 700; }
+.match-creator { color: #94a3b8; }
+.match-stake { font-weight: 800; color: #22c55e; font-size: 1.1rem; }
+.match-actions { display: flex; gap: 10px; align-items: center; }
+.tag { font-size: 0.8rem; padding: 4px 12px; border-radius: 999px; background: #1e293b; color: #94a3b8; }
+.tag-live { background: #123524; color: #22c55e; font-weight: 600; }
+.btn-small { padding: 6px 14px; font-size: 0.9rem; }
+.btn-disabled { opacity: 0.5; cursor: not-allowed; }
+.empty { text-align: center; padding: 28px; color: #94a3b8; }
+
+.overlay {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(15, 23, 42, 0.96);
+    align-items: center; justify-content: center; text-align: center; padding: 24px;
+}
+.overlay.show { display: flex; }
+.overlay-message { font-size: 1.4rem; font-weight: 700; margin-bottom: 24px; }
+.overlay-label { color: #94a3b8; font-size: 1.1rem; }
+.overlay-number { font-size: 7rem; font-weight: 800; color: #22c55e; line-height: 1.1; }
+{% endblock %}
+
+{% block content %}
+<div class="container lobby">
+    <div class="lobby-head">
+        <h1>Lobby <span id="live-status" class="live">Connecting...</span></h1>
+        <div class="your-balance">
+            Available: <strong id="balance-available">K {{ wallet.available|floatformat:2 }}</strong>
+            &nbsp;|&nbsp; Locked in matches: <strong id="balance-held">K {{ wallet.held|floatformat:2 }}</strong>
+        </div>
+    </div>
+
+    <section class="panel">
+        <h2>Create a match</h2>
+        <div id="error-box" class="error-box"></div>
+        <form id="create-form" class="create-form">
+            <div class="field">
+                <label for="game">Game</label>
+                <select id="game">
+                    {% for value, label in games %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="field">
+                <label for="stake">Stake (K)</label>
+                <input id="stake" type="number" min="1" step="0.01" placeholder="e.g. 50" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Create match</button>
+        </form>
+               <p class="hint">A fee of K1 (K2 for stakes above K19) is charged to each player when they stake. Your stake is locked until the match ends. Anyone who joins pays the same stake and fee.</p>
+    </section>
+
+    <section class="panel">
+        <h2>Matches</h2>
+        <div id="matches-list" class="match-list">
+            <div class="empty" id="empty-message">No matches right now.</div>
+        </div>
+    </section>
+</div>
+
+<div id="countdown-overlay" class="overlay">
+    <div>
+        <p id="countdown-message" class="overlay-message"></p>
+        <p id="countdown-label" class="overlay-label">Match starts in</p>
+        <div id="countdown-number" class="overlay-number">10</div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const ME = {{ user.id }};
+    const listEl = document.getElementById("matches-list");
+    const emptyEl = document.getElementById("empty-message");
+    const errorEl = document.getElementById("error-box");
+    const statusEl = document.getElementById("live-status");
+    const availableEl = document.getElementById("balance-available");
+    const heldEl = document.getElementById("balance-held");
+    const form = document.getElementById("create-form");
+    const stakeInput = document.getElementById("stake");
+    const gameInput = document.getElementById("game");
+    const overlay = document.getElementById("countdown-overlay");
+    const overlayMessage = document.getElementById("countdown-message");
+    const overlayLabel = document.getElementById("countdown-label");
+    const overlayNumber = document.getElementById("countdown-number");
+    let ws = null;
+    let errorTimer = null;
+    let countdownTimer = null;
+
+    function showError(message) {
+        errorEl.textContent = message;
+        errorEl.style.display = "block";
+        clearTimeout(errorTimer);
+        errorTimer = setTimeout(() => { errorEl.style.display = "none"; }, 5000);
+    }
+
+    function setStatus(live) {
+        statusEl.textContent = live ? "Live" : "Offline - reconnecting...";
+        statusEl.className = live ? "live on" : "live";
+    }
+
+    function setBalance(b) {
+        availableEl.textContent = "K " + b.available;
+        heldEl.textContent = "K " + b.held;
+    }
+
+    function updateEmpty() {
+        emptyEl.style.display = listEl.querySelector(".match-row") ? "none" : "block";
+    }
+
+    function send(data) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(data));
+        } else {
+            showError("Not connected yet. Please wait a moment.");
+        }
+    }
+
+    function makeEl(tag, className, text) {
+        const el = document.createElement(tag);
+        if (className) el.className = className;
+        if (text !== undefined) el.textContent = text;
+        return el;
+    }
+
+    // ----- countdown -----
+    function startCountdown(c) {
+        const endAt = Date.now() + c.seconds * 1000;
+        overlayMessage.textContent = c.message;
+        overlay.classList.add("show");
+        clearInterval(countdownTimer);
+
+        function tick() {
+            const left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+            overlayNumber.textContent = left;
+            overlayLabel.textContent = left > 0 ? "Match starts in" : "Starting the match...";
+        }
+        tick();
+        countdownTimer = setInterval(tick, 200);
+    }
+
+    // ----- match rows -----
+    function renderMatch(m) {
+        const row = makeEl("div", "match-row");
+        row.id = "match-" + m.id;
+
+        const info = makeEl("div", "match-info");
+        info.appendChild(makeEl("span", "match-game", m.game));
+        if (m.opponent) {
+            info.appendChild(makeEl("span", "match-creator", m.creator + " vs " + m.opponent));
+        } else {
+            info.appendChild(makeEl("span", "match-creator", "by " + m.creator));
+        }
+        info.appendChild(makeEl("span", "match-stake", "K " + m.stake));
+
+        const actions = makeEl("div", "match-actions");
+
+        if (m.status === "open") {
+            if (m.creator_id === ME) {
+                actions.appendChild(makeEl("span", "tag", "Your match"));
+                const cancelBtn = makeEl("button", "btn btn-outline btn-small", "Cancel");
+                cancelBtn.type = "button";
+                cancelBtn.addEventListener("click", () => send({ action: "cancel", match_id: m.id }));
+                actions.appendChild(cancelBtn);
+            } else {
+                const joinBtn = makeEl("button", "btn btn-primary btn-small", "Join");
+                joinBtn.type = "button";
+                joinBtn.addEventListener("click", () => send({ action: "join", match_id: m.id }));
+                actions.appendChild(joinBtn);
+            }
+        } else {
+            const label = m.status === "starting" ? "Starting..." : "Ongoing match";
+            actions.appendChild(makeEl("span", "tag tag-live", label));
+
+            const joinBtn = makeEl("button", "btn btn-primary btn-small btn-disabled", "Join");
+            joinBtn.type = "button";
+            joinBtn.disabled = true;
+            actions.appendChild(joinBtn);
+
+            const isPlayer = m.creator_id === ME || m.opponent_id === ME;
+            if (isPlayer && m.status === "active") {
+                const link = makeEl("a", "btn btn-outline btn-small", "Go to match");
+                link.href = "/matches/" + m.id + "/";
+                actions.appendChild(link);
+            }
+        }
+
+        row.appendChild(info);
+        row.appendChild(actions);
+        return row;
+    }
+
+    function upsertMatch(m) {
+        const row = renderMatch(m);
+        const old = document.getElementById("match-" + m.id);
+        if (old) {
+            old.replaceWith(row);
+        } else {
+            listEl.prepend(row);
+        }
+        updateEmpty();
+    }
+
+    function removeMatch(id) {
+        const row = document.getElementById("match-" + id);
+        if (row) row.remove();
+        updateEmpty();
+    }
+
+    // ----- messages from the server -----
+    function handle(data) {
+        switch (data.type) {
+            case "init":
+                listEl.querySelectorAll(".match-row").forEach((r) => r.remove());
+                data.matches.forEach(upsertMatch);
+                setBalance(data.balance);
+                updateEmpty();
+                if (data.countdown) startCountdown(data.countdown);
+                break;
+            case "match_created":
+            case "match_updated":
+                upsertMatch(data.match);
+                break;
+            case "match_removed":
+                removeMatch(data.match_id);
+                break;
+            case "balance":
+                setBalance(data);
+                break;
+            case "countdown":
+                startCountdown(data);
+                break;
+            case "match_start":
+                clearInterval(countdownTimer);
+                overlayLabel.textContent = "Starting the match...";
+                window.location.href = data.url;
+                break;
+            case "error":
+                showError(data.message);
+                break;
+        }
+    }
+
+    function connect() {
+        const protocol = location.protocol === "https:" ? "wss" : "ws";
+        ws = new WebSocket(protocol + "://" + location.host + "/ws/lobby/");
+        ws.onopen = () => setStatus(true);
+        ws.onclose = () => {
+            setStatus(false);
+            setTimeout(connect, 2000);
+        };
+        ws.onmessage = (e) => handle(JSON.parse(e.data));
+    }
+
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        send({ action: "create", game: gameInput.value, stake: stakeInput.value });
+        stakeInput.value = "";
+    });
+
+    connect();
+})();
+</script>
+{% endblock %}

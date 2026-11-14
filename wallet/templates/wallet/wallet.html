@@ -1,0 +1,83 @@
+{% extends "core/base.html" %}
+
+{% block title %}My Wallet - IndiBet{% endblock %}
+
+{% block extra_css %}
+.wallet-page { padding: 40px 0 60px; }
+.wallet-page h1 { margin-bottom: 24px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.card { background: #111c33; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; }
+.card .label { color: #94a3b8; font-size: 0.9rem; }
+.card .amount { font-size: 1.8rem; font-weight: 800; margin-top: 4px; }
+.card.available .amount { color: #22c55e; }
+.actions { display: flex; gap: 12px; margin-bottom: 40px; flex-wrap: wrap; }
+.btn-disabled { opacity: 0.5; cursor: not-allowed; }
+.history h2 { margin-bottom: 12px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; background: #111c33; border-radius: 12px; overflow: hidden; }
+th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid #1e293b; white-space: nowrap; }
+th { color: #94a3b8; font-size: 0.85rem; font-weight: 600; background: #0f172a; }
+.status { font-size: 0.8rem; padding: 2px 10px; border-radius: 999px; background: #1e293b; }
+.status.completed { color: #22c55e; }
+.status.pending { color: #facc15; }
+.status.failed { color: #f87171; }
+.empty { text-align: center; padding: 32px; color: #94a3b8; background: #111c33; border-radius: 12px; }
+.note { color: #94a3b8; font-size: 0.85rem; margin-top: 8px; }
+{% endblock %}
+
+{% block content %}
+<div class="container wallet-page">
+    <h1>My Wallet</h1>
+
+    <div class="cards">
+        <div class="card available">
+            <div class="label">Available</div>
+            <div class="amount">K {{ wallet.available|floatformat:2 }}</div>
+        </div>
+        <div class="card">
+            <div class="label">Held (in matches or withdrawals)</div>
+            <div class="amount">K {{ wallet.held|floatformat:2 }}</div>
+        </div>
+        <div class="card">
+            <div class="label">Total</div>
+            <div class="amount">K {{ total|floatformat:2 }}</div>
+        </div>
+    </div>
+
+    <div class="actions">
+        <span class="btn btn-primary btn-disabled">Deposit (coming soon)</span>
+        <span class="btn btn-outline btn-disabled">Withdraw (coming soon)</span>
+    </div>
+
+    <div class="history">
+        <h2>Recent transactions</h2>
+        {% if transactions %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in transactions %}
+                    <tr>
+                        <td>{{ t.created_at|date:"d M Y, H:i" }}</td>
+                        <td>{{ t.get_kind_display }}</td>
+                        <td>K {{ t.amount|floatformat:2 }}</td>
+                        <td><span class="status {{ t.status }}">{{ t.get_status_display }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="note">Showing your latest 20 transactions.</p>
+        {% else %}
+        <div class="empty">No transactions yet. Once you deposit, they will show up here.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

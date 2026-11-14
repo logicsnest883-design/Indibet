@@ -1,0 +1,315 @@
+{% extends "core/base.html" %}
+
+{% block title %}Checkers #{{ match.id }} - IndiBet{% endblock %}
+
+{% block extra_css %}
+.game { padding: 30px 0 60px; }
+.game-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.game-head h1 { font-size: 1.8rem; }
+.game-head small { font-size: 1rem; color: #94a3b8; font-weight: 400; }
+.live { font-size: 0.8rem; font-weight: 600; padding: 4px 12px; border-radius: 999px; background: #3f1d1d; color: #f87171; }
+.live.on { background: #123524; color: #22c55e; }
+
+.game-layout { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.board-wrap { width: min(92vw, 520px); }
+.board {
+    display: grid; grid-template-columns: repeat(8, 1fr);
+    width: 100%; aspect-ratio: 1 / 1;
+    border: 4px solid #1e293b; border-radius: 6px; overflow: hidden;
+}
+.sq { position: relative; display: flex; align-items: center; justify-content: center; }
+.sq.light { background: #f0d9b5; }
+.sq.dark { background: #b58863; cursor: pointer; }
+.sq.last { box-shadow: inset 0 0 0 4px rgba(250, 204, 21, 0.85); }
+.sq.selected { box-shadow: inset 0 0 0 4px #22c55e; }
+.sq.target::after { content: ""; position: absolute; width: 30%; height: 30%; border-radius: 50%; background: rgba(34, 197, 94, 0.9); }
+.sq.suspended::before { content: "X"; position: absolute; color: #dc2626; font-weight: 800; font-size: 1.8rem; }
+
+.piece {
+    width: 78%; height: 78%; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; box-shadow: 0 3px 6px rgba(0, 0, 0, 0.45);
+}
+.piece.p1 { background: radial-gradient(circle at 35% 30%, #ffffff, #cbd5e1); color: #0f172a; }
+.piece.p2 { background: radial-gradient(circle at 35% 30%, #f87171, #b91c1c); color: #ffffff; }
+.piece.king { border: 3px solid #facc15; }
+
+.player-bar { display: flex; align-items: center; gap: 10px; padding: 10px 4px; font-weight: 600; color: #94a3b8; }
+.player-bar.active { color: #e2e8f0; }
+.chip { width: 18px; height: 18px; border-radius: 50%; display: inline-block; }
+.chip.p1 { background: #f8fafc; }
+.chip.p2 { background: #dc2626; }
+.clock { margin-left: auto; font-weight: 800; font-variant-numeric: tabular-nums; background: #1e293b; color: #e2e8f0; padding: 2px 12px; border-radius: 999px; }
+.clock.low { background: #3f1d1d; color: #f87171; }
+
+.side { flex: 1; min-width: 260px; max-width: 420px; display: flex; flex-direction: column; gap: 14px; }
+.status { padding: 14px 18px; border-radius: 10px; font-weight: 700; background: #1e293b; }
+.status.turn, .status.win { background: #123524; color: #22c55e; }
+.status.lose { background: #3f1d1d; color: #f87171; }
+.status.wait { background: #1e293b; color: #94a3b8; }
+.notice { color: #facc15; font-size: 0.9rem; min-height: 1.2em; }
+.error-box { display: none; background: #3f1d1d; border: 1px solid #f87171; color: #fecaca; padding: 10px 14px; border-radius: 8px; }
+.facts { background: #111c33; border: 1px solid #1e293b; border-radius: 10px; padding: 14px 18px; display: grid; gap: 6px; }
+.facts div { display: flex; justify-content: space-between; color: #94a3b8; }
+.facts strong { color: #e2e8f0; }
+.side .btn { text-align: center; font-size: 1rem; }
+{% endblock %}
+
+{% block content %}
+<div class="container game">
+    <div class="game-head">
+        <h1>Checkers <small>Match #{{ match.id }}</small></h1>
+        <span id="conn" class="live">Connecting...</span>
+    </div>
+
+    <div class="game-layout">
+        <div class="board-wrap">
+            <div id="top-player" class="player-bar"></div>
+            <div id="board" class="board"></div>
+            <div id="bottom-player" class="player-bar"></div>
+        </div>
+
+        <aside class="side">
+            <div id="status" class="status wait">Connecting...</div>
+            <div id="notice" class="notice"></div>
+            <div id="error" class="error-box"></div>
+
+            <div class="facts">
+                <div><span>Stake each</span><strong>K {{ match.stake|floatformat:2 }}</strong></div>
+                <div><span>Winner receives</span><strong>K {{ pot|floatformat:2 }}</strong></div>
+            </div>
+
+            <button id="resign-btn" type="button" class="btn btn-outline" style="display:none;">Resign</button>
+            <a href="{% url 'matches:lobby' %}" class="btn btn-outline">Back to lobby</a>
+        </aside>
+    </div>
+</div>
+
+<script>
+(function () {
+    const MATCH_ID = {{ match.id }};
+    const boardEl = document.getElementById("board");
+    const statusEl = document.getElementById("status");
+    const noticeEl = document.getElementById("notice");
+    const errorEl = document.getElementById("error");
+    const connEl = document.getElementById("conn");
+    const topEl = document.getElementById("top-player");
+    const bottomEl = document.getElementById("bottom-player");
+    const resignBtn = document.getElementById("resign-btn");
+
+    let ws = null;
+    let state = null;      // the latest state sent by the server
+    let selected = null;   // squares chosen so far for the move being built
+    let errorTimer = null;
+    let failedAttempts = 0;
+    let clockEnd = null;   // when the current player's time runs out (browser time)
+
+    function showError(message) {
+        errorEl.textContent = message;
+        errorEl.style.display = "block";
+        clearTimeout(errorTimer);
+        errorTimer = setTimeout(() => { errorEl.style.display = "none"; }, 5000);
+    }
+
+    function send(data) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(data));
+        } else {
+            showError("Not connected. Please wait a moment.");
+        }
+    }
+
+    // ----- move building -----
+    function myMoves() {
+        const myTurn = state && state.status === "active" && state.turn === state.you;
+        return myTurn ? state.legal_moves : [];
+    }
+
+    function candidates() {
+        return myMoves().filter(
+            (p) => p.length > selected.length && selected.every((s, i) => p[i] === s)
+        );
+    }
+
+    function submit(path) {
+        selected = null;
+        send({ action: "move", path: path });
+        render();
+    }
+
+    function onSquareClick(sq) {
+        if (!state || state.status !== "active" || state.turn !== state.you) return;
+
+        if (selected) {
+            if (selected.length === 1 && selected[0] === sq) {  // click the same piece again: deselect
+                selected = null;
+                render();
+                return;
+            }
+            const cands = candidates();
+            if (cands.some((p) => p[selected.length] === sq)) {
+                selected = selected.concat([sq]);
+                const matching = cands.filter((p) => p[selected.length - 1] === sq);
+                const complete = matching.find((p) => p.length === selected.length);
+                if (complete) return submit(complete);
+                if (matching.length === 1) return submit(matching[0]);  // the rest is forced
+                render();
+                return;
+            }
+        }
+
+        const hasMoves = myMoves().some((p) => p[0] === sq);
+        selected = hasMoves ? [sq] : null;
+        render();
+    }
+
+    // ----- drawing -----
+    function fillBar(el, color, name, active) {
+        el.innerHTML = "";
+        const chip = document.createElement("span");
+        chip.className = "chip " + color;
+        const label = document.createElement("span");
+        label.textContent = name;
+        el.appendChild(chip);
+        el.appendChild(label);
+        el.classList.toggle("active", active);
+        if (active && state && state.status === "active") {
+            const clock = document.createElement("span");
+            clock.className = "clock";
+            el.appendChild(clock);
+        }
+    }
+
+    function updateClock() {
+        const clocks = document.querySelectorAll(".clock");
+        if (!clocks.length || clockEnd === null) return;
+        const left = Math.max(0, Math.ceil((clockEnd - Date.now()) / 1000));
+        const text = Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0");
+        clocks.forEach((c) => {
+            c.textContent = text;
+            c.classList.toggle("low", left <= 10);
+        });
+    }
+
+    function renderStatus() {
+        let text, cls;
+        if (state.status === "finished") {
+            if (state.result === "draw") {
+                text = "Draw. Both stakes were refunded.";
+                cls = "wait";
+            } else if (state.result === state.you) {
+                text = "You won! Your winnings have been added to your wallet.";
+                cls = "win";
+            } else {
+                text = "You lost this match.";
+                cls = "lose";
+            }
+        } else if (state.turn === state.you) {
+            text = "Your turn.";
+            cls = "turn";
+        } else {
+            text = "Waiting for " + state.players[state.turn] + " to move...";
+            cls = "wait";
+        }
+        statusEl.textContent = text;
+        statusEl.className = "status " + cls;
+
+        const suspended = state.suspended !== null && state.suspended !== undefined;
+        noticeEl.textContent = suspended ? "A piece was suspended." : "";
+        resignBtn.style.display = state.status === "active" ? "block" : "none";
+    }
+
+    function render() {
+        if (!state) return;
+        const me = state.you;
+        const opp = me === "p1" ? "p2" : "p1";
+        const flip = me === "p2";  // every player sees their own pieces at the bottom
+        const active = state.status === "active";
+
+        const targets = new Set();
+        if (selected) candidates().forEach((p) => targets.add(p[selected.length]));
+        const last = new Set(state.last_move || []);
+
+        boardEl.innerHTML = "";
+        for (let dr = 0; dr < 8; dr++) {
+            for (let dc = 0; dc < 8; dc++) {
+                const r = flip ? 7 - dr : dr;
+                const c = flip ? 7 - dc : dc;
+                const sq = r * 8 + c;
+                const dark = (r + c) % 2 === 1;
+
+                const cell = document.createElement("div");
+                cell.className = "sq " + (dark ? "dark" : "light");
+                if (dark) {
+                    if (last.has(sq)) cell.classList.add("last");
+                    if (selected && selected.includes(sq)) cell.classList.add("selected");
+                    if (targets.has(sq)) cell.classList.add("target");
+                    if (state.suspended === sq) cell.classList.add("suspended");
+                    cell.addEventListener("click", () => onSquareClick(sq));
+                }
+
+                const v = state.board[sq];
+                if (v !== 0) {
+                    const piece = document.createElement("div");
+                    piece.className = "piece " + (v > 0 ? "p1" : "p2") + (Math.abs(v) === 2 ? " king" : "");
+                    if (Math.abs(v) === 2) piece.textContent = "K";
+                    cell.appendChild(piece);
+                }
+                boardEl.appendChild(cell);
+            }
+        }
+
+        fillBar(topEl, opp, state.players[opp], active && state.turn === opp);
+        fillBar(bottomEl, me, state.players[me] + " (you)", active && state.turn === me);
+        renderStatus();
+        updateClock();
+    }
+
+    // ----- connection -----
+    function connect() {
+        const protocol = location.protocol === "https:" ? "wss" : "ws";
+        ws = new WebSocket(protocol + "://" + location.host + "/ws/checkers/" + MATCH_ID + "/");
+
+        ws.onopen = () => {
+            connEl.textContent = "Live";
+            connEl.className = "live on";
+        };
+        ws.onclose = () => {
+            connEl.textContent = "Offline - reconnecting...";
+            connEl.className = "live";
+            if (state && state.status === "finished") return;
+            if (!state) {
+                failedAttempts += 1;
+                if (failedAttempts >= 3) {
+                    statusEl.textContent = "Could not open this match.";
+                    return;
+                }
+            }
+            setTimeout(connect, 2000);
+        };
+        ws.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            if (data.type === "state") {
+                state = data;
+                clockEnd = (data.seconds_left === null || data.seconds_left === undefined)
+                    ? null
+                    : Date.now() + data.seconds_left * 1000;
+                selected = null;
+                render();
+            } else if (data.type === "error") {
+                showError(data.message);
+            }
+        };
+    }
+
+    resignBtn.addEventListener("click", () => {
+        if (confirm("Resign this match? You will lose your stake.")) {
+            send({ action: "resign" });
+        }
+    });
+
+    setInterval(updateClock, 250);
+    connect();
+})();
+</script>
+{% endblock %}

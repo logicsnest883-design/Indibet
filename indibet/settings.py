@@ -150,3 +150,12 @@ CHANNEL_LAYERS = {
 
 
 MOVE_TIME_SECONDS = 60
+
+
+
+
+ALLOWED_HOSTS = ["*"]
+
+CSRF_TRUSTED_ORIGINS = [
+    "indibet.railway.internal",
+]

@@ -157,5 +157,6 @@ MOVE_TIME_SECONDS = 60
 ALLOWED_HOSTS = ["*"]
 
 CSRF_TRUSTED_ORIGINS = [
-    "indibet.railway.internal",
+    "https://*.up.railway.app",
+    "https://indibet.railway.internal",
 ]

@@ -6,6 +6,7 @@ from channels.layers import get_channel_layer
 from django.utils import timezone
 
 from checkers.services import forfeit_on_timeout as checkers_timeout
+from chessgame.services import forfeit_on_timeout as chess_timeout
 
 from .models import Match
 
@@ -13,9 +14,10 @@ logger = logging.getLogger(__name__)
 
 CHECK_EVERY_SECONDS = 2
 
-# Each game says how a timeout is settled (chess will be added here later)
+# Each game says how a timeout is settled
 TIMEOUT_HANDLERS = {
     "checkers": checkers_timeout,
+    "chess": chess_timeout,
 }
 
 _task = None

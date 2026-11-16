@@ -10,6 +10,7 @@ from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 from channels.security.websocket import AllowedHostsOriginValidator  # noqa: E402
 
 import checkers.routing  # noqa: E402
+import chessgame.routing  # noqa: E402
 import matches.routing  # noqa: E402
 
 application = ProtocolTypeRouter(
@@ -20,6 +21,7 @@ application = ProtocolTypeRouter(
                 URLRouter(
                     matches.routing.websocket_urlpatterns
                     + checkers.routing.websocket_urlpatterns
+                    + chessgame.routing.websocket_urlpatterns
                 )
             )
         ),

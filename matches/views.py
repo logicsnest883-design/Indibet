@@ -6,9 +6,10 @@ from wallet.models import Wallet
 
 from .models import Match
 
-# Each game has its own board page (chess will be added here later)
+# Each game has its own board page
 GAME_TEMPLATES = {
     "checkers": "checkers/board.html",
+    "chess": "chessgame/board.html",
 }
 
 

@@ -3,11 +3,11 @@ from django.db import models
 
 
 class Match(models.Model):
-    """One game between two players. Shared by every game (checkers now, chess later)."""
+    """One game between two players. Shared by every game."""
 
     class Game(models.TextChoices):
         CHECKERS = "checkers", "Checkers"
-        # CHESS = "chess", "Chess"   <- added later
+        CHESS = "chess", "Chess"
 
     class Status(models.TextChoices):
         OPEN = "open", "Open"

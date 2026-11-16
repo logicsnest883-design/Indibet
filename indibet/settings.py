@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "accounts",
     "wallet",
     "checkers",
+    "chessgame",
     "matches",
 ]
 
@@ -133,4 +134,4 @@ LOGIN_REDIRECT_URL = "core:home"
 LOGOUT_REDIRECT_URL = "core:home"
 
 # Seconds each player has to make a move
-MOVE_TIME_SECONDS = 60
+MOVE_TIME_SECONDS = 120

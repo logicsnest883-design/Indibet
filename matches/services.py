@@ -1,20 +1,22 @@
 from datetime import timedelta
 
-from django.db import transaction
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
 from checkers.engine import ENGINE as CHECKERS_ENGINE
+from chessgame.engine import ENGINE as CHESS_ENGINE
 from wallet.services import hold_stake, refund_stake
 
 from .models import Match
 
 COUNTDOWN_SECONDS = 10
 
-# How each game creates its starting board (chess will be added here later)
+# How each game creates its starting board
 INITIAL_STATES = {
     "checkers": CHECKERS_ENGINE.initial_state,
+    "chess": CHESS_ENGINE.initial_state,
 }
 
 
@@ -97,6 +99,7 @@ def activate_match(match_id):
         return None
     if match.status != Match.Status.STARTING:
         return None
+
     factory = INITIAL_STATES.get(match.game)
     match.state = factory() if factory else {}
     match.status = Match.Status.ACTIVE

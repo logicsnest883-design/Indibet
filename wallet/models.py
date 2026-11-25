@@ -46,6 +46,8 @@ class Transaction(models.Model):
         PAYOUT = "payout", "Winnings"
         FEE = "fee", "Platform fee"
         WITHDRAW_HOLD = "withdraw_hold", "Withdrawal requested"
+        TOURNAMENT_ENTRY = "tournament_entry", "Tournament entry"
+        TOURNAMENT_REFUND = "tournament_refund", "Tournament entry refunded"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"

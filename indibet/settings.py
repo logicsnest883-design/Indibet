@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "checkers",
     "chessgame",
     "matches",
+    "tournaments",
 ]
 
 MIDDLEWARE = [
@@ -134,4 +135,4 @@ LOGIN_REDIRECT_URL = "core:home"
 LOGOUT_REDIRECT_URL = "core:home"
 
 # Seconds each player has to make a move
-MOVE_TIME_SECONDS = 120
+MOVE_TIME_SECONDS = 60

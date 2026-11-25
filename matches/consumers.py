@@ -8,7 +8,6 @@ from channels.layers import get_channel_layer
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.utils import timezone
-from .sweeper import ensure_sweeper
 
 from wallet.models import Wallet
 from wallet.services import InsufficientFunds
@@ -23,6 +22,7 @@ from .services import (
     create_match,
     join_match,
 )
+from .sweeper import ensure_sweeper
 
 LOBBY_GROUP = "lobby"
 OFFLINE_GRACE_SECONDS = 5  # a page reload or short drop does not hide your matches
@@ -54,11 +54,13 @@ def activate_due_matches_db():
 
 @database_sync_to_async
 def get_visible_matches():
-    """Open matches whose creators are online, plus every match that is starting or in progress."""
+    """Open matches whose creators are online, plus every match that is starting or in progress.
+    Tournament matches never show here."""
     qs = (
         Match.objects.filter(
             Q(status=Match.Status.OPEN, creator_id__in=list(ONLINE.keys()))
-            | Q(status__in=[Match.Status.STARTING, Match.Status.ACTIVE])
+            | Q(status__in=[Match.Status.STARTING, Match.Status.ACTIVE]),
+            tournament__isnull=True,
         )
         .select_related("creator", "opponent")
         .order_by("created_at")
@@ -78,7 +80,7 @@ def get_open_matches_of(user_id):
 def get_my_countdown(user_id):
     """If the player is in a match that is counting down, return what is left (for page reloads)."""
     m = (
-        Match.objects.filter(status=Match.Status.STARTING)
+        Match.objects.filter(status=Match.Status.STARTING, tournament__isnull=True)
         .filter(Q(creator_id=user_id) | Q(opponent_id=user_id))
         .select_related("creator", "opponent")
         .first()

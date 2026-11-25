@@ -11,6 +11,7 @@ class Match(models.Model):
 
     class Status(models.TextChoices):
         OPEN = "open", "Open"
+        WAITING = "waiting", "Waiting for players"  # a tournament match, before the check-in ends
         STARTING = "starting", "Starting"
         ACTIVE = "active", "In progress"
         FINISHED = "finished", "Finished"
@@ -44,6 +45,21 @@ class Match(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     turn_deadline = models.DateTimeField(null=True, blank=True)  # when the current player's time runs out
     finished_at = models.DateTimeField(null=True, blank=True)
+
+    # ----- tournament matches only -----
+    tournament = models.ForeignKey(
+        "tournaments.Tournament",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="matches",
+    )
+    bracket_round = models.PositiveSmallIntegerField(null=True, blank=True)
+    bracket_number = models.PositiveSmallIntegerField(null=True, blank=True)
+    checkin_deadline = models.DateTimeField(null=True, blank=True)
+    present = models.JSONField(default=list, blank=True)  # ids of the players who have arrived
+    unpaid = models.JSONField(default=list, blank=True)  # ids of players who could not pay the match fee
+    result_recorded = models.BooleanField(default=False)  # the tournament has used this match's result
 
     class Meta:
         ordering = ["-created_at"]

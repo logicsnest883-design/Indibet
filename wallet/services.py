@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from django.db import transaction
@@ -83,11 +84,13 @@ def refund_stake(user_id, amount, match_id, refund_fee=False):
 @transaction.atomic
 def settle_match(match_id, winner_id, loser_id, stake):
     """The winner receives the full pot (both stakes). Fees were already charged at staking."""
+    stake = Decimal(stake)
+    if stake == 0:
+        return  # tournament matches have no stake
     reference = f"payout:{match_id}"
     if Transaction.objects.filter(reference=reference).exists():
         return  # already paid
 
-    stake = Decimal(stake)
     wallets = _lock_wallets([winner_id, loser_id])
     winner, loser = wallets[winner_id], wallets[loser_id]
 
@@ -104,10 +107,12 @@ def settle_match(match_id, winner_id, loser_id, stake):
 @transaction.atomic
 def settle_draw(match_id, user_a, user_b, stake):
     """Draw: both players get their stake back."""
+    stake = Decimal(stake)
+    if stake == 0:
+        return  # tournament matches have no stake
     if Transaction.objects.filter(reference__startswith=f"draw:{match_id}:").exists():
         return  # already refunded
 
-    stake = Decimal(stake)
     wallets = _lock_wallets([user_a, user_b])
     for uid in (user_a, user_b):
         wallet = wallets[uid]
@@ -115,3 +120,57 @@ def settle_draw(match_id, user_a, user_b, stake):
         wallet.available += stake
         wallet.save(update_fields=["available", "held", "updated_at"])
         _log(wallet, Transaction.Kind.STAKE_REFUND, stake, f"draw:{match_id}:{uid}", match_id)
+
+
+@transaction.atomic
+def charge_entry_fee(user_id, amount, tournament_id):
+    """Take a tournament entry fee from the player's available balance."""
+    amount = Decimal(amount)
+    Wallet.objects.get_or_create(user_id=user_id)
+    wallet = _lock_wallets([user_id])[user_id]
+    if wallet.available < amount:
+        raise InsufficientFunds("Not enough balance.")
+
+    wallet.available -= amount
+    wallet.save(update_fields=["available", "updated_at"])
+    _log(
+        wallet,
+        Transaction.Kind.TOURNAMENT_ENTRY,
+        amount,
+        f"tentry:{tournament_id}:{user_id}:{uuid.uuid4().hex[:12]}",
+    )
+
+
+@transaction.atomic
+def refund_entry_fee(user_id, amount, tournament_id):
+    """Give a tournament entry fee back."""
+    amount = Decimal(amount)
+    wallet = _lock_wallets([user_id])[user_id]
+    wallet.available += amount
+    wallet.save(update_fields=["available", "updated_at"])
+    _log(
+        wallet,
+        Transaction.Kind.TOURNAMENT_REFUND,
+        amount,
+        f"trefund:{tournament_id}:{user_id}:{uuid.uuid4().hex[:12]}",
+    )
+
+
+@transaction.atomic
+def charge_match_fee(user_id, amount, match_id):
+    """Take the fee for a tournament match. It is never refunded, even if the match ends by walkover."""
+    amount = Decimal(amount)
+    if amount <= 0:
+        return
+    reference = f"tmfee:{match_id}:{user_id}"
+    if Transaction.objects.filter(reference=reference).exists():
+        return  # already charged
+
+    Wallet.objects.get_or_create(user_id=user_id)
+    wallet = _lock_wallets([user_id])[user_id]
+    if wallet.available < amount:
+        raise InsufficientFunds("Not enough balance.")
+
+    wallet.available -= amount
+    wallet.save(update_fields=["available", "updated_at"])
+    _log(wallet, Transaction.Kind.FEE, amount, reference, match_id)

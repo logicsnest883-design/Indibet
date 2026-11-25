@@ -25,9 +25,11 @@ class MatchError(Exception):
 
 
 def is_busy(user_id):
-    """True if the player is in a match that is starting or in progress."""
+    """True if the player is in a match that is waiting for its players, starting or in progress."""
     return (
-        Match.objects.filter(status__in=[Match.Status.STARTING, Match.Status.ACTIVE])
+        Match.objects.filter(
+            status__in=[Match.Status.WAITING, Match.Status.STARTING, Match.Status.ACTIVE]
+        )
         .filter(Q(creator_id=user_id) | Q(opponent_id=user_id))
         .exists()
     )

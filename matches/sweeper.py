@@ -7,6 +7,9 @@ from django.utils import timezone
 
 from checkers.services import forfeit_on_timeout as checkers_timeout
 from chessgame.services import forfeit_on_timeout as chess_timeout
+from tournaments.checkin import notification_for
+from tournaments.results import record_finished_matches
+from tournaments.runner import tick as tournament_tick
 
 from .models import Match
 
@@ -42,6 +45,32 @@ def _expire_overdue():
     return expire_overdue_matches()
 
 
+@database_sync_to_async
+def _tournament_tick():
+    """Use the results of finished games first, then do whatever the clock says is due."""
+    results = record_finished_matches()
+    result = tournament_tick()
+    return {
+        "resolved": results["recorded"] + result["resolved"],
+        "created": results["replays"] + result["created"],
+    }
+
+
+@database_sync_to_async
+def _notifications_for(match_ids):
+    """(user_id, banner) pairs: what each player should be told about these tournament matches."""
+    found = []
+    matches = Match.objects.filter(pk__in=match_ids).select_related("tournament", "creator", "opponent")
+    for match in matches:
+        for user_id in (match.creator_id, match.opponent_id):
+            banner = notification_for(match, user_id)
+            if banner:
+                found.append((user_id, banner))
+    # "your match is ready" must come last, so it is the one a player is left looking at
+    found.sort(key=lambda pair: pair[1]["kind"] == "ready")
+    return found
+
+
 async def _loop():
     layer = get_channel_layer()
     while True:
@@ -58,6 +87,20 @@ async def _loop():
                 )
         except Exception:
             logger.exception("Timer check failed")
+
+        try:
+            result = await _tournament_tick()
+            changed = result["created"] + result["resolved"]
+            if changed:
+                for user_id, banner in await _notifications_for(changed):
+                    await layer.group_send(
+                        f"user_{user_id}", {"type": "lobby.event", "payload": banner}
+                    )
+                for match_id in changed:
+                    await layer.group_send(f"tmatch_{match_id}", {"type": "tmatch.refresh"})
+        except Exception:
+            logger.exception("Tournament check failed")
+
         await asyncio.sleep(CHECK_EVERY_SECONDS)
 
 

@@ -21,13 +21,17 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
             padding: 16px 24px;
             background: #111c33;
             border-bottom: 1px solid #1e293b;
         }
         .logo { font-size: 1.5rem; font-weight: 800; letter-spacing: 1px; }
         .logo span { color: #22c55e; }
-        .nav-links { display: flex; gap: 12px; align-items: center; }
+        .nav-links { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .nav-link { color: #94a3b8; font-weight: 600; }
+        .nav-link:hover { color: #e2e8f0; }
 
         .btn {
             display: inline-block;
@@ -50,6 +54,25 @@
             font-size: 0.95rem;
         }
 
+        .notify {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            flex-wrap: wrap;
+            padding: 12px 24px;
+            font-weight: 600;
+            text-align: center;
+            background: #123524;
+            color: #22c55e;
+            border-bottom: 1px solid #1e293b;
+        }
+        .notify.ready { background: #3b2f0b; color: #facc15; }
+        .notify.out, .notify.lost, .notify.both_out { background: #3f1d1d; color: #fecaca; }
+        .notify.draw { background: #1e293b; color: #e2e8f0; }
+        .notify .btn { padding: 6px 16px; font-size: 0.9rem; }
+        .notify-close { background: none; border: none; color: inherit; font-size: 1.5rem; line-height: 1; cursor: pointer; }
+
         main { flex: 1; }
         .container { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
 
@@ -70,6 +93,7 @@
         <nav class="nav-links">
             {% block nav %}
             {% if user.is_authenticated %}
+                <a href="{% url 'accounts:referrals' %}" class="nav-link">Invite friends</a>
                 <a href="{% url 'wallet:wallet' %}" class="balance" title="Available balance">K {{ user.wallet.available|floatformat:2 }}</a>
                 <span>Hi, {{ user.username }}</span>
                 <form method="post" action="{% url 'accounts:logout' %}" style="display:inline;">
@@ -81,9 +105,18 @@
                 <a href="{% url 'accounts:signup' %}" class="btn btn-primary">Sign up</a>
             {% endif %}
             {% endblock %}
+            <a href="{% url 'tournaments:list' %}" class="nav-link">Tournaments</a>
             <a href="{% url 'matches:lobby' %}" class="btn btn-primary">Play</a>
         </nav>
     </header>
+
+    {% if user.is_authenticated %}
+    <div id="notify" class="notify">
+        <span id="notify-text"></span>
+        <a id="notify-link" class="btn btn-primary" href="#">Open</a>
+        <button id="notify-close" type="button" class="notify-close" aria-label="Close">&times;</button>
+    </div>
+    {% endif %}
 
     <main>
         {% block content %}{% endblock %}
@@ -92,5 +125,46 @@
     <footer>
         <p>&copy; 2026 IndiBet. 18+ only. Play responsibly.</p>
     </footer>
+
+    {% if user.is_authenticated %}
+    <script>
+    (function () {
+        const box = document.getElementById("notify");
+        const text = document.getElementById("notify-text");
+        const link = document.getElementById("notify-link");
+        const closeBtn = document.getElementById("notify-close");
+        const IN_ROOM = location.pathname.indexOf("/tournaments/match/") === 0;
+
+        function show(p) {
+            if (IN_ROOM && p.kind === "ready") return;  // the room already shows this
+            text.textContent = p.text;
+            link.href = p.url;
+            link.textContent = p.kind === "ready" ? "Open match" : "View tournament";
+            box.className = "notify " + p.kind;
+            box.style.display = "flex";
+        }
+
+        closeBtn.addEventListener("click", () => { box.style.display = "none"; });
+
+        // A match may already be waiting when this page opens
+        fetch("{% url 'tournaments:my_match' %}", { credentials: "same-origin" })
+            .then((r) => r.json())
+            .then((d) => { if (d.notify) show(d.notify); })
+            .catch(() => {});
+
+        // Live messages while the page is open
+        function connect() {
+            const protocol = location.protocol === "https:" ? "wss" : "ws";
+            const ws = new WebSocket(protocol + "://" + location.host + "/ws/me/");
+            ws.onmessage = (e) => {
+                const d = JSON.parse(e.data);
+                if (d.type === "notify") show(d);
+            };
+            ws.onclose = () => setTimeout(connect, 3000);
+        }
+        connect();
+    })();
+    </script>
+    {% endif %}
 </body>
 </html>

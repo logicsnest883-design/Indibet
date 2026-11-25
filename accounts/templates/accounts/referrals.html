@@ -1,0 +1,76 @@
+{% extends "core/base.html" %}
+
+{% block title %}Invite friends - IndiBet{% endblock %}
+
+{% block extra_css %}
+.ref-page { padding: 40px 24px 60px; max-width: 760px; }
+.ref-page h1 { margin-bottom: 8px; }
+.sub { color: #94a3b8; margin-bottom: 24px; }
+.panel { background: #111c33; border: 1px solid #1e293b; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+.panel h2 { margin-bottom: 14px; font-size: 1.2rem; }
+.link-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.link-row input { flex: 1; min-width: 220px; padding: 10px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-size: 0.95rem; }
+.link-row .btn { font-size: 1rem; }
+.hint { color: #94a3b8; font-size: 0.9rem; margin-top: 12px; }
+.big { font-size: 2.6rem; font-weight: 800; color: #22c55e; line-height: 1.1; margin-bottom: 12px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #1e293b; }
+th { color: #94a3b8; font-size: 0.85rem; font-weight: 600; }
+.empty { color: #94a3b8; }
+{% endblock %}
+
+{% block content %}
+<div class="container ref-page">
+    <h1>Invite friends</h1>
+    <p class="sub">Share your link. When someone signs up with it, using a phone number that is not already registered, they count as your referral.</p>
+
+    <section class="panel">
+        <h2>Your link</h2>
+        <div class="link-row">
+            <input id="ref-link" type="text" value="{{ link }}" readonly>
+            <button id="copy-btn" type="button" class="btn btn-primary">Copy</button>
+            <a id="wa-btn" class="btn btn-outline" target="_blank" rel="noopener">Share on WhatsApp</a>
+        </div>
+        <p class="hint">Your code: <strong>{{ code }}</strong></p>
+    </section>
+
+    <section class="panel">
+        <h2>People you referred</h2>
+        <div class="big">{{ count }}</div>
+        {% if people %}
+        <table>
+            <thead><tr><th>Username</th><th>Joined</th></tr></thead>
+            <tbody>
+                {% for p in people %}
+                <tr><td>{{ p.username }}</td><td>{{ p.date_joined|date:"d M Y, H:i" }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty">Nobody yet. Share your link to get started.</p>
+        {% endif %}
+    </section>
+</div>
+
+<script>
+(function () {
+    const input = document.getElementById("ref-link");
+    const copyBtn = document.getElementById("copy-btn");
+    const waBtn = document.getElementById("wa-btn");
+
+    const message = "Join me on IndiBet and play checkers and chess against real players. Sign up here: " + input.value;
+    waBtn.href = "https://wa.me/?text=" + encodeURIComponent(message);
+
+    copyBtn.addEventListener("click", async () => {
+        try {
+            await navigator.clipboard.writeText(input.value);
+        } catch (e) {
+            input.select();
+            document.execCommand("copy");
+        }
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => { copyBtn.textContent = "Copy"; }, 2000);
+    });
+})();
+</script>
+{% endblock %}

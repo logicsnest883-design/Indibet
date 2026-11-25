@@ -1,0 +1,58 @@
+{% extends "core/base.html" %}
+
+{% block title %}Tournaments - IndiBet{% endblock %}
+
+{% block extra_css %}
+.tpage { padding: 40px 24px 60px; }
+.tpage h1 { margin-bottom: 24px; }
+.tpage h2 { margin: 28px 0 12px; font-size: 1.2rem; color: #94a3b8; }
+.tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.tcard { display: block; background: #111c33; border: 1px solid #1e293b; border-radius: 12px; padding: 18px; }
+.tcard:hover { border-color: #22c55e; }
+.tcard-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.tcard h3 { font-size: 1.1rem; }
+.badge { font-size: 0.75rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #1e293b; color: #94a3b8; white-space: nowrap; }
+.badge.registration { background: #123524; color: #22c55e; }
+.badge.running { background: #3b2f0b; color: #facc15; }
+.meta { display: flex; flex-wrap: wrap; gap: 4px 14px; color: #94a3b8; font-size: 0.9rem; margin-bottom: 12px; }
+.tcard-bottom { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 0.9rem; }
+.pool { color: #22c55e; font-weight: 700; }
+.chip { background: #1e293b; color: #facc15; padding: 2px 10px; border-radius: 999px; font-size: 0.8rem; }
+.empty { text-align: center; color: #94a3b8; padding: 40px 0; }
+{% endblock %}
+
+{% block content %}
+<div class="container tpage">
+    <h1>Tournaments</h1>
+
+    {% for title, items in sections %}
+        {% if items %}
+        <h2>{{ title }}</h2>
+        <div class="tgrid">
+            {% for t in items %}
+            <a class="tcard" href="{% url 'tournaments:detail' t.pk %}">
+                <div class="tcard-top">
+                    <h3>{{ t.name }}</h3>
+                    <span class="badge {{ t.status }}">{{ t.get_status_display }}</span>
+                </div>
+                <div class="meta">
+                    <span>{{ t.get_game_display }}</span>
+                    <span>Starts {{ t.starts_at|date:"D d M, H:i" }}</span>
+                    <span>{{ t.enrolled }} / {{ t.max_players }} players</span>
+                </div>
+                <div class="tcard-bottom">
+                    <span>Entry: {% if t.entry_fee > 0 %}K {{ t.entry_fee|floatformat:2 }}{% else %}Free{% endif %}</span>
+                    <span class="pool">Prize pool: K {{ t.pool_now|floatformat:2 }}</span>
+                    {% if t.refs_needed %}<span class="chip">{{ t.refs_needed }} referrals needed</span>{% endif %}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endfor %}
+
+    {% if not sections.0.1 and not sections.1.1 and not sections.2.1 %}
+    <p class="empty">No tournaments yet. Check back soon.</p>
+    {% endif %}
+</div>
+{% endblock %}

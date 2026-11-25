@@ -12,6 +12,7 @@ from channels.security.websocket import AllowedHostsOriginValidator  # noqa: E40
 import checkers.routing  # noqa: E402
 import chessgame.routing  # noqa: E402
 import matches.routing  # noqa: E402
+import tournaments.routing  # noqa: E402
 
 application = ProtocolTypeRouter(
     {
@@ -22,6 +23,7 @@ application = ProtocolTypeRouter(
                     matches.routing.websocket_urlpatterns
                     + checkers.routing.websocket_urlpatterns
                     + chessgame.routing.websocket_urlpatterns
+                    + tournaments.routing.websocket_urlpatterns
                 )
             )
         ),

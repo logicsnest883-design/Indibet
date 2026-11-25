@@ -1,0 +1,126 @@
+{% extends "core/base.html" %}
+
+{% block title %}{{ round_label }} - {{ match.tournament.name }} - IndiBet{% endblock %}
+
+{% block extra_css %}
+.room { padding: 40px 24px 60px; max-width: 640px; text-align: center; }
+.room h1 { font-size: 2rem; }
+.sub { color: #94a3b8; margin-bottom: 24px; }
+.panel { background: #111c33; border: 1px solid #1e293b; border-radius: 12px; padding: 22px; margin-bottom: 20px; }
+.versus { display: flex; align-items: center; justify-content: center; gap: 24px; flex-wrap: wrap; }
+.player { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 150px; }
+.dot { width: 16px; height: 16px; border-radius: 50%; background: #334155; }
+.dot.here { background: #22c55e; box-shadow: 0 0 10px #22c55e; }
+.state { color: #94a3b8; font-size: 0.9rem; }
+.vs-mark { font-weight: 800; color: #94a3b8; font-size: 1.2rem; }
+#status-text { font-size: 1.2rem; font-weight: 700; }
+.countdown { font-size: 2.4rem; font-weight: 800; color: #facc15; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.panel.advance, .panel.won { border-color: #22c55e; }
+.panel.advance #status-text, .panel.won #status-text { color: #22c55e; }
+.panel.out, .panel.lost, .panel.both_out { border-color: #f87171; }
+.panel.out #status-text, .panel.lost #status-text, .panel.both_out #status-text { color: #f87171; }
+.room .btn { font-size: 1rem; }
+{% endblock %}
+
+{% block content %}
+<div class="container room">
+    <h1>{{ round_label }}</h1>
+    <p class="sub">{{ match.tournament.name }} - {{ match.tournament.get_game_display }}</p>
+
+    <section class="panel">
+        <div class="versus">
+            <div class="player">
+                <div id="you-dot" class="dot"></div>
+                <strong>{{ user.username }} (you)</strong>
+                <span id="you-state" class="state">Connecting...</span>
+            </div>
+            <div class="vs-mark">vs</div>
+            <div class="player">
+                <div id="opp-dot" class="dot"></div>
+                <strong>{{ opponent.username }}</strong>
+                <span id="opp-state" class="state"></span>
+            </div>
+        </div>
+    </section>
+
+    <section id="status-box" class="panel">
+        <div id="status-text">Connecting...</div>
+        <div id="countdown" class="countdown"></div>
+    </section>
+
+    <div id="actions" style="display:none;">
+        <a class="btn btn-primary" href="{% url 'tournaments:detail' match.tournament_id %}">Back to the tournament</a>
+    </div>
+</div>
+
+<script>
+(function () {
+    const MATCH_ID = {{ match.id }};
+    const statusBox = document.getElementById("status-box");
+    const statusText = document.getElementById("status-text");
+    const countdownEl = document.getElementById("countdown");
+    const actions = document.getElementById("actions");
+    const youDot = document.getElementById("you-dot");
+    const oppDot = document.getElementById("opp-dot");
+    const youState = document.getElementById("you-state");
+    const oppState = document.getElementById("opp-state");
+
+    let endAt = null;
+    let finished = false;
+    let ws = null;
+
+    function fmt(seconds) {
+        return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
+    }
+
+    function tickClock() {
+        if (endAt === null) return;
+        const left = Math.max(0, Math.ceil((endAt - Date.now()) / 1000));
+        countdownEl.textContent = left > 0 ? "Check-in closes in " + fmt(left) : "Check-in closed";
+    }
+
+    function render(d) {
+        youDot.className = "dot" + (d.you_here ? " here" : "");
+        oppDot.className = "dot" + (d.opponent_here ? " here" : "");
+        youState.textContent = d.you_here ? "Here" : "Not here yet";
+        oppState.textContent = d.opponent_here ? "Here" : "Not here yet";
+
+        if (d.status === "waiting") {
+            statusBox.className = "panel";
+            statusText.textContent = d.opponent_here
+                ? "Your opponent is here. Starting..."
+                : "Waiting for " + d.opponent + " to arrive...";
+            endAt = d.seconds_left === null ? null : Date.now() + d.seconds_left * 1000;
+        } else if (d.status === "active") {
+            statusText.textContent = "Both players are here. Taking you to the board...";
+            endAt = null;
+            countdownEl.textContent = "";
+            if (d.board_url) window.location.href = d.board_url;
+        } else {
+            finished = true;
+            endAt = null;
+            countdownEl.textContent = "";
+            statusBox.className = "panel " + (d.outcome || "");
+            statusText.textContent = d.message || "This match is over.";
+            actions.style.display = "block";
+        }
+        tickClock();
+    }
+
+    function connect() {
+        const protocol = location.protocol === "https:" ? "wss" : "ws";
+        ws = new WebSocket(protocol + "://" + location.host + "/ws/tmatch/" + MATCH_ID + "/");
+        ws.onmessage = (e) => {
+            const d = JSON.parse(e.data);
+            if (d.type === "state") render(d);
+        };
+        ws.onclose = () => {
+            if (!finished) setTimeout(connect, 2000);
+        };
+    }
+
+    setInterval(tickClock, 250);
+    connect();
+})();
+</script>
+{% endblock %}
